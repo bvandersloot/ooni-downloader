@@ -48,13 +48,17 @@ type Response struct {
 
 func init() {
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "\t%s [flags] http_param1:value1 ... http_paramN:valueN\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "\n\n\n")
+		fmt.Fprintf(os.Stderr, "Usage of %s:\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s [flags] http_param1:value1 ... http_paramN:valueN\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  Information on what HTTP parameters are accepted is available at https://measurements.ooni.torproject.org/api/\n\n")
+		fmt.Fprintf(os.Stderr, "  Example: %s --output-directory ./output probe_cc:US limit:1000\n\n\n", os.Args[0])
 		flag.PrintDefaults()
+		fmt.Fprintf(os.Stderr, "\n\n\n")
 	}
-	var format = logging.MustStringFormatter("%{level:.4s} %{time} %{longfunc}>    %{message}")
+	var format = logging.MustStringFormatter("%{level:.4s} %{longfunc}>    %{message}")
 	logging.SetFormatter(format)
-	flag.StringVar(&outputDirectory, "output-directory", "./", "what folder should contain all of the pulled data-files")
+	flag.StringVar(&outputDirectory, "output-directory", "./", "what folder should contain all of the pulled data files")
 	flag.Parse()
 	getParameters = make(map[string]string)
 	for _, arg := range flag.Args() {
@@ -112,22 +116,23 @@ func producer(results chan Result) {
 		} else if err != nil {
 			log.Fatalf("Response did not comply to expected format. %s", err.Error())
 		}
-		if parsed.Metadata.NextURL == nil {
-			currentURL = ""
-		} else {
-			currentURL = *parsed.Metadata.NextURL
-		}
 		log.Infof("Forwarding %d results from: %s", len(parsed.Results), currentURL)
 		for _, result := range parsed.Results {
 			results <- result
 		}
 		resp.Body.Close()
 		log.Infof("Done forwarding results from: %s", currentURL)
+		if parsed.Metadata.NextURL == nil {
+			currentURL = ""
+		} else {
+			currentURL = *parsed.Metadata.NextURL
+		}
 	}
 }
 
 func consumer(results chan Result, wg *sync.WaitGroup) {
 	for result := range results {
+		log.Infof("Requesting result from: %s", result.DownloadURL)
 		resp, err := getWithRetry(result.DownloadURL)
 		if err != nil {
 			log.Fatalf("Faulure when connecting to data: %s", err.Error())
