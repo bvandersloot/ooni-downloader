@@ -47,6 +47,7 @@ type Response struct {
 }
 
 func init() {
+	logging.SetLevel(logging.INFO, "ooni-downloader")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "\n\n\n")
 		fmt.Fprintf(os.Stderr, "Usage of %s:\n\n", os.Args[0])
@@ -62,11 +63,11 @@ func init() {
 	flag.Parse()
 	getParameters = make(map[string]string)
 	for _, arg := range flag.Args() {
-		if strings.Count(arg, ":") != 1 {
+		if strings.Count(arg, ":") == 0 {
 			flag.Usage()
-			log.Fatal("Must use exactly one colon in HTTP GET parameter pairs")
+			log.Fatal("Must use at least one colon in HTTP GET parameter pairs")
 		}
-		arr := strings.Split(arg, ":")
+		arr := strings.SplitN(arg, ":", 2)
 		getParameters[arr[0]] = arr[1]
 	}
 }
@@ -105,7 +106,7 @@ func producer(results chan Result) {
 	}
 	currentURL = currentURL + strings.Join(parameters, "&")
 	for currentURL != "" {
-		log.Infof("Looking up resource: %s", currentURL)
+		log.Debugf("Looking up resource: %s", currentURL)
 		resp, err := getWithRetry(currentURL)
 		if err != nil {
 			log.Fatalf("Faulure when connecting to OONI: %s", err.Error())
@@ -116,12 +117,13 @@ func producer(results chan Result) {
 		} else if err != nil {
 			log.Fatalf("Response did not comply to expected format. %s", err.Error())
 		}
-		log.Infof("Forwarding %d results from: %s", len(parsed.Results), currentURL)
+		log.Infof("Processing page %d/%d. %d total results available.", parsed.Metadata.CurrentPage, parsed.Metadata.Pages, parsed.Metadata.Count)
+		log.Debugf("Forwarding %d results from: %s", len(parsed.Results), currentURL)
 		for _, result := range parsed.Results {
 			results <- result
 		}
 		resp.Body.Close()
-		log.Infof("Done forwarding results from: %s", currentURL)
+		log.Debugf("Done forwarding results from: %s", currentURL)
 		if parsed.Metadata.NextURL == nil {
 			currentURL = ""
 		} else {
@@ -132,7 +134,7 @@ func producer(results chan Result) {
 
 func consumer(results chan Result, wg *sync.WaitGroup) {
 	for result := range results {
-		log.Infof("Requesting result from: %s", result.DownloadURL)
+		log.Debugf("Requesting result from: %s", result.DownloadURL)
 		resp, err := getWithRetry(result.DownloadURL)
 		if err != nil {
 			log.Fatalf("Faulure when connecting to data: %s", err.Error())
