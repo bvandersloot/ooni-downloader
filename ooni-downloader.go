@@ -25,25 +25,25 @@ const URL = "https://measurements.ooni.torproject.org/api/v1/files?"
 const Retries = 10
 
 type Metadata struct {
-	count       int     `json:"count"`
-	currentPage int     `json:"current_page"`
-	limit       int     `json:"limit"`
-	nextURL     *string `json:"next_url"`
-	offset      int     `json:"offset"`
-	pages       int     `json:"pages"`
+	Count       int     `json:"count"`
+	CurrentPage int     `json:"current_page"`
+	Limit       int     `json:"limit"`
+	NextURL     *string `json:"next_url"`
+	Offset      int     `json:"offset"`
+	Pages       int     `json:"pages"`
 }
 
 type Result struct {
-	downloadURL   string    `json:"download_url"`
-	index         int       `json:"index"`
-	probeASN      string    `json:"probe_asn"`
-	probeCC       string    `json:"probe_cc"`
-	testStartTime time.Time `json:"test_start_time"`
+	DownloadURL   string    `json:"download_url"`
+	Index         int       `json:"index"`
+	ProbeASN      string    `json:"probe_asn"`
+	ProbeCC       string    `json:"probe_cc"`
+	TestStartTime time.Time `json:"test_start_time"`
 }
 
 type Response struct {
-	metadata Metadata `json:"metadata"`
-	results  []Result `json:"result"`
+	Metadata Metadata `json:"metadata"`
+	Results  []Result `json:"results"`
 }
 
 func init() {
@@ -101,36 +101,38 @@ func producer(results chan Result) {
 	}
 	currentURL = currentURL + strings.Join(parameters, "&")
 	for currentURL != "" {
+		log.Infof("Looking up resource: %s", currentURL)
 		resp, err := getWithRetry(currentURL)
 		if err != nil {
 			log.Fatalf("Faulure when connecting to OONI: %s", err.Error())
 		}
-		dec := json.NewDecoder(resp.Body)
 		var parsed Response
-		if err := dec.Decode(&parsed); err == io.EOF {
+		if err := json.NewDecoder(resp.Body).Decode(&parsed); err == io.EOF {
 			break
 		} else if err != nil {
 			log.Fatalf("Response did not comply to expected format. %s", err.Error())
 		}
-		if parsed.metadata.nextURL == nil {
+		if parsed.Metadata.NextURL == nil {
 			currentURL = ""
 		} else {
-			currentURL = *parsed.metadata.nextURL
+			currentURL = *parsed.Metadata.NextURL
 		}
-		for _, result := range parsed.results {
+		log.Infof("Forwarding %d results from: %s", len(parsed.Results), currentURL)
+		for _, result := range parsed.Results {
 			results <- result
 		}
 		resp.Body.Close()
+		log.Infof("Done forwarding results from: %s", currentURL)
 	}
 }
 
 func consumer(results chan Result, wg *sync.WaitGroup) {
 	for result := range results {
-		resp, err := getWithRetry(result.downloadURL)
+		resp, err := getWithRetry(result.DownloadURL)
 		if err != nil {
 			log.Fatalf("Faulure when connecting to data: %s", err.Error())
 		}
-		f, err := os.Create(filepath.Join(outputDirectory, fmt.Sprintf("%d", result.index)))
+		f, err := os.Create(filepath.Join(outputDirectory, fmt.Sprintf("%d", result.Index)))
 		if err != nil {
 			log.Fatalf("Faulure making the output file: %s", err.Error())
 		}
